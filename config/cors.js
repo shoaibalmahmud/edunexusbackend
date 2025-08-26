@@ -56,14 +56,26 @@ const corsConfig = {
       if (!origin) return callback(null, true);
       
       const allowedOrigins = [
-        'https://yourdomain.com', // Replace with your actual domain
-        'https://www.yourdomain.com',
+        'https://edunexus-frontend.onrender.com', // Replace with your actual frontend URL
+        'https://your-frontend-domain.com', // Add your actual frontend domain
         'capacitor://localhost',
         'ionic://localhost',
-        'file://'
+        'file://',
+        // Allow Render preview URLs for testing
+        /^https:\/\/.*\.onrender\.com$/
       ];
       
-      if (allowedOrigins.indexOf(origin) !== -1) {
+      // Check if origin matches any allowed origin (including regex patterns)
+      const isAllowed = allowedOrigins.some(allowed => {
+        if (typeof allowed === 'string') {
+          return allowed === origin;
+        } else if (allowed instanceof RegExp) {
+          return allowed.test(origin);
+        }
+        return false;
+      });
+      
+      if (isAllowed) {
         callback(null, true);
       } else {
         console.log('CORS blocked origin:', origin);
