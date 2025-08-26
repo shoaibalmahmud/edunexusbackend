@@ -66,6 +66,7 @@ const corsConfig = {
         'capacitor://localhost',
         'ionic://localhost',
         'file://',
+        'http://10.0.2.2:3000',
         // Allow all Render domains for testing
         /^https:\/\/.*\.onrender\.com$/,
         // Allow local development for mobile testing
