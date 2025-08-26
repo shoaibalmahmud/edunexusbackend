@@ -49,31 +49,60 @@ NODE_ENV=production
 MONGODB_URI=your_mongodb_connection_string_here
 ```
 
-## Step 4: Update CORS Configuration
+## Step 4: Mobile App API Configuration
 
-Before deploying, update your CORS configuration in `config/cors.js`:
+Your CORS configuration has been updated to support mobile app development. The configuration includes:
+
+- **Mobile App Protocols**: `capacitor://localhost`, `ionic://localhost`, `file://`
+- **Local Network Testing**: Support for local IP addresses (192.168.x.x, 10.x.x.x)
+- **Android Emulator**: Support for Android emulator localhost (10.0.2.2)
+- **Render Domains**: All Render domains for deployment
+
+### For Mobile App Development:
+
+1. **Update your mobile app's API base URL** to point to your Render deployment:
+   ```
+   https://your-app-name.onrender.com
+   ```
+
+2. **For local development**, your mobile app can still use:
+   ```
+   http://192.168.x.x:3000 (your local IP)
+   http://10.0.2.2:3000 (Android emulator)
+   ```
+
+3. **For production**, use your Render URL:
+   ```
+   https://edunexusbackend.onrender.com
+   ```
+
+### CORS Configuration (Already Updated)
+
+The CORS configuration in `config/cors.js` is now optimized for mobile apps:
 
 ```javascript
 production: {
   origin: function (origin, callback) {
-    if (!origin) return callback(null, true);
+    // For mobile apps, we need to be more permissive with origins
+    if (!origin) {
+      // Allow requests with no origin (mobile apps, Postman, etc.)
+      return callback(null, true);
+    }
     
     const allowedOrigins = [
-      'https://your-frontend-domain.com', // Replace with your frontend URL
-      'https://your-mobile-app-domain.com',
+      'https://edunexusbackend.onrender.com',
       'capacitor://localhost',
       'ionic://localhost',
-      'file://'
+      'file://',
+      // Allow all Render domains for testing
+      /^https:\/\/.*\.onrender\.com$/,
+      // Allow local development for mobile testing
+      /^http:\/\/192\.168\.\d+\.\d+:\d+$/, // Local network IPs
+      /^http:\/\/10\.\d+\.\d+\.\d+:\d+$/,  // Android emulator IPs
     ];
     
-    if (allowedOrigins.indexOf(origin) !== -1) {
-      callback(null, true);
-    } else {
-      console.log('CORS blocked origin:', origin);
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  // ... rest of config
+    // ... rest of validation logic
+  }
 }
 ```
 
@@ -82,6 +111,41 @@ production: {
 1. Wait for the build to complete
 2. Your app will be available at: `https://your-app-name.onrender.com`
 3. Test your API endpoints
+
+## Step 6: Mobile App Integration
+
+### Update Your Mobile App Configuration
+
+1. **For Production**: Update your mobile app's API base URL to:
+   ```
+   https://edunexusbackend.onrender.com
+   ```
+
+2. **For Development**: Keep using your local development URL:
+   ```
+   http://192.168.x.x:3000 (your local IP)
+   http://10.0.2.2:3000 (Android emulator)
+   ```
+
+### Testing Your Mobile App
+
+1. **Test with Postman/Insomnia**:
+   - Base URL: `https://edunexusbackend.onrender.com`
+   - Test your authentication endpoints: `/api/auth/login`, `/api/auth/register`
+   - Test your course endpoints: `/api/courses`
+
+2. **Test with Your Mobile App**:
+   - Update the API base URL in your mobile app
+   - Test login/registration functionality
+   - Test course listing and details
+   - Test file uploads (if applicable)
+
+### Common Mobile App Issues
+
+1. **CORS Errors**: The CORS configuration is now optimized for mobile apps
+2. **Network Timeout**: Render free tier has cold starts (30-60 seconds for first request)
+3. **SSL Certificate**: Render provides automatic HTTPS
+4. **API Response Time**: Consider implementing loading states in your mobile app
 
 ## Important Notes
 

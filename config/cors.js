@@ -24,7 +24,8 @@ const corsConfig = {
         'http://localhost', // General localhost
         'https://localhost', // HTTPS localhost
         'http://0.0.0.0:8080',
-        'http://0.0.0.0:3000'
+        'http://0.0.0.0:3000',
+        'https://edunexusbackend.onrender.com'
       ];
       
       if (allowedOrigins.indexOf(origin) !== -1) {
@@ -52,17 +53,26 @@ const corsConfig = {
   
   production: {
     origin: function (origin, callback) {
-      // In production, be more restrictive
-      if (!origin) return callback(null, true);
+      // For mobile apps, we need to be more permissive with origins
+      // Mobile apps often don't send proper origin headers
+      if (!origin) {
+        // Allow requests with no origin (mobile apps, Postman, etc.)
+        return callback(null, true);
+      }
       
       const allowedOrigins = [
-        'https://edunexus-frontend.onrender.com', // Replace with your actual frontend URL
-        'https://your-frontend-domain.com', // Add your actual frontend domain
+        'https://edunexusbackend.onrender.com',
+        'https://edunexus-frontend.onrender.com',
         'capacitor://localhost',
         'ionic://localhost',
         'file://',
-        // Allow Render preview URLs for testing
-        /^https:\/\/.*\.onrender\.com$/
+        // Allow all Render domains for testing
+        /^https:\/\/.*\.onrender\.com$/,
+        // Allow local development for mobile testing
+        /^http:\/\/192\.168\.\d+\.\d+:\d+$/, // Local network IPs
+        /^http:\/\/10\.\d+\.\d+\.\d+:\d+$/,  // Android emulator IPs
+        /^http:\/\/localhost:\d+$/,
+        /^https:\/\/localhost:\d+$/
       ];
       
       // Check if origin matches any allowed origin (including regex patterns)
@@ -79,6 +89,9 @@ const corsConfig = {
         callback(null, true);
       } else {
         console.log('CORS blocked origin:', origin);
+        // For mobile apps, we might want to be more lenient
+        // Uncomment the line below if you want to allow all origins in production
+        // callback(null, true);
         callback(new Error('Not allowed by CORS'));
       }
     },
