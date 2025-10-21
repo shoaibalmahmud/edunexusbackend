@@ -2,6 +2,9 @@
 
 A comprehensive backend API for a peer-to-peer tutoring platform where teachers can upload courses and students can purchase and enroll in them.
 
+## Live release apk
+- **Live**: [Download APK](https://filebin.net/xexsazpbmt57rirv)
+
 ## Features
 
 - **User Management**: Three user roles (Admin, Teacher, Student)
