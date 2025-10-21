@@ -499,4 +499,386 @@ router.delete('/:id/materials/:materialIndex', async (req, res) => {
   }
 });
 
+// Search courses by tags
+router.get('/search/tags', async (req, res) => {
+  try {
+    const { 
+      tags, 
+      subject, 
+      level, 
+      minPrice, 
+      maxPrice, 
+      teacherId,
+      page = 1,
+      limit = 10
+    } = req.query;
+
+    // Build filter object
+    const filter = { 
+      isPublished: true, 
+      isActive: true 
+    };
+
+    // Add tags filter - search for courses that contain any of the specified tags
+    if (tags) {
+      const tagArray = Array.isArray(tags) ? tags : tags.split(',').map(tag => tag.trim());
+      filter.tags = { $in: tagArray };
+    }
+
+    // Add other filters
+    if (subject) filter.subject = subject;
+    if (level) filter.level = level;
+    if (teacherId) filter.teacher = teacherId;
+    if (minPrice || maxPrice) {
+      filter.price = {};
+      if (minPrice) filter.price.$gte = parseFloat(minPrice);
+      if (maxPrice) filter.price.$lte = parseFloat(maxPrice);
+    }
+
+    const skip = (page - 1) * limit;
+    const courses = await Course.find(filter)
+      .populate('teacher', 'name email profileImage bio subjects experience')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await Course.countDocuments(filter);
+
+    res.json({
+      courses,
+      pagination: {
+        current: parseInt(page),
+        total: Math.ceil(total / limit),
+        hasNext: page * limit < total,
+        hasPrev: page > 1
+      },
+      searchParams: {
+        tags: tags,
+        subject,
+        level,
+        minPrice,
+        maxPrice,
+        teacherId
+      }
+    });
+  } catch (error) {
+    console.error('Search by tags error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get all unique tags from published courses
+router.get('/tags/all', async (req, res) => {
+  try {
+    const courses = await Course.find({ 
+      isPublished: true, 
+      isActive: true 
+    }).select('tags');
+
+    // Extract all unique tags
+    const allTags = courses.reduce((acc, course) => {
+      if (course.tags && course.tags.length > 0) {
+        acc.push(...course.tags);
+      }
+      return acc;
+    }, []);
+
+    // Remove duplicates and sort
+    const uniqueTags = [...new Set(allTags)].sort();
+
+    res.json({
+      tags: uniqueTags,
+      count: uniqueTags.length
+    });
+  } catch (error) {
+    console.error('Get all tags error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get popular tags (most frequently used)
+router.get('/tags/popular', async (req, res) => {
+  try {
+    const { limit = 10 } = req.query;
+
+    const courses = await Course.find({ 
+      isPublished: true, 
+      isActive: true 
+    }).select('tags');
+
+    // Count tag frequency
+    const tagCount = {};
+    courses.forEach(course => {
+      if (course.tags && course.tags.length > 0) {
+        course.tags.forEach(tag => {
+          tagCount[tag] = (tagCount[tag] || 0) + 1;
+        });
+      }
+    });
+
+    // Sort by frequency and get top tags
+    const popularTags = Object.entries(tagCount)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, parseInt(limit))
+      .map(([tag, count]) => ({ tag, count }));
+
+    res.json({
+      popularTags,
+      total: Object.keys(tagCount).length
+    });
+  } catch (error) {
+    console.error('Get popular tags error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Search courses by text (comprehensive text search)
+router.get('/search/text', async (req, res) => {
+  try {
+    const { 
+      q, // search query
+      subject, 
+      level, 
+      minPrice, 
+      maxPrice, 
+      teacherId,
+      page = 1,
+      limit = 10
+    } = req.query;
+
+    if (!q || q.trim() === '') {
+      return res.status(400).json({ message: 'Search query is required' });
+    }
+
+    // Build filter object
+    const filter = { 
+      isPublished: true, 
+      isActive: true 
+    };
+
+    // Add text search across multiple fields
+    const searchQuery = q.trim();
+    filter.$or = [
+      { title: { $regex: searchQuery, $options: 'i' } },
+      { description: { $regex: searchQuery, $options: 'i' } },
+      { subject: { $regex: searchQuery, $options: 'i' } },
+      { tags: { $in: [new RegExp(searchQuery, 'i')] } },
+      { 'teacher.name': { $regex: searchQuery, $options: 'i' } }
+    ];
+
+    // Add other filters
+    if (subject) filter.subject = subject;
+    if (level) filter.level = level;
+    if (teacherId) filter.teacher = teacherId;
+    if (minPrice || maxPrice) {
+      filter.price = {};
+      if (minPrice) filter.price.$gte = parseFloat(minPrice);
+      if (maxPrice) filter.price.$lte = parseFloat(maxPrice);
+    }
+
+    const skip = (page - 1) * limit;
+    const courses = await Course.find(filter)
+      .populate('teacher', 'name email profileImage bio subjects experience')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await Course.countDocuments(filter);
+
+    res.json({
+      courses,
+      pagination: {
+        current: parseInt(page),
+        total: Math.ceil(total / limit),
+        hasNext: page * limit < total,
+        hasPrev: page > 1
+      },
+      searchParams: {
+        query: searchQuery,
+        subject,
+        level,
+        minPrice,
+        maxPrice,
+        teacherId
+      },
+      totalResults: total
+    });
+  } catch (error) {
+    console.error('Text search error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Advanced search with multiple criteria
+router.get('/search/advanced', async (req, res) => {
+  try {
+    const { 
+      q, // search query
+      tags,
+      subject, 
+      level, 
+      minPrice, 
+      maxPrice, 
+      teacherId,
+      minRating,
+      maxDuration,
+      minDuration,
+      page = 1,
+      limit = 10,
+      sortBy = 'createdAt', // createdAt, price, rating, title
+      sortOrder = 'desc' // asc, desc
+    } = req.query;
+
+    // Build filter object
+    const filter = { 
+      isPublished: true, 
+      isActive: true 
+    };
+
+    // Add text search if query provided
+    if (q && q.trim() !== '') {
+      const searchQuery = q.trim();
+      filter.$or = [
+        { title: { $regex: searchQuery, $options: 'i' } },
+        { description: { $regex: searchQuery, $options: 'i' } },
+        { subject: { $regex: searchQuery, $options: 'i' } },
+        { tags: { $in: [new RegExp(searchQuery, 'i')] } },
+        { 'teacher.name': { $regex: searchQuery, $options: 'i' } }
+      ];
+    }
+
+    // Add tags filter
+    if (tags) {
+      const tagArray = Array.isArray(tags) ? tags : tags.split(',').map(tag => tag.trim());
+      filter.tags = { $in: tagArray };
+    }
+
+    // Add other filters
+    if (subject) filter.subject = subject;
+    if (level) filter.level = level;
+    if (teacherId) filter.teacher = teacherId;
+    if (minPrice || maxPrice) {
+      filter.price = {};
+      if (minPrice) filter.price.$gte = parseFloat(minPrice);
+      if (maxPrice) filter.price.$lte = parseFloat(maxPrice);
+    }
+    if (minRating) filter['rating.average'] = { $gte: parseFloat(minRating) };
+    if (minDuration || maxDuration) {
+      filter.duration = {};
+      if (minDuration) filter.duration.$gte = parseFloat(minDuration);
+      if (maxDuration) filter.duration.$lte = parseFloat(maxDuration);
+    }
+
+    // Build sort object
+    const sort = {};
+    if (sortBy === 'price') {
+      sort.price = sortOrder === 'asc' ? 1 : -1;
+    } else if (sortBy === 'rating') {
+      sort['rating.average'] = sortOrder === 'asc' ? 1 : -1;
+    } else if (sortBy === 'title') {
+      sort.title = sortOrder === 'asc' ? 1 : -1;
+    } else {
+      sort.createdAt = sortOrder === 'asc' ? 1 : -1;
+    }
+
+    const skip = (page - 1) * limit;
+    const courses = await Course.find(filter)
+      .populate('teacher', 'name email profileImage bio subjects experience')
+      .sort(sort)
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    const total = await Course.countDocuments(filter);
+
+    res.json({
+      courses,
+      pagination: {
+        current: parseInt(page),
+        total: Math.ceil(total / limit),
+        hasNext: page * limit < total,
+        hasPrev: page > 1
+      },
+      searchParams: {
+        query: q,
+        tags,
+        subject,
+        level,
+        minPrice,
+        maxPrice,
+        teacherId,
+        minRating,
+        minDuration,
+        maxDuration,
+        sortBy,
+        sortOrder
+      },
+      totalResults: total
+    });
+  } catch (error) {
+    console.error('Advanced search error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
+// Get search suggestions/autocomplete
+router.get('/search/suggestions', async (req, res) => {
+  try {
+    const { q, limit = 5 } = req.query;
+
+    if (!q || q.trim() === '') {
+      return res.json({ suggestions: [] });
+    }
+
+    const searchQuery = q.trim();
+    const filter = { 
+      isPublished: true, 
+      isActive: true,
+      $or: [
+        { title: { $regex: searchQuery, $options: 'i' } },
+        { subject: { $regex: searchQuery, $options: 'i' } },
+        { tags: { $in: [new RegExp(searchQuery, 'i')] } }
+      ]
+    };
+
+    const courses = await Course.find(filter)
+      .select('title subject tags')
+      .limit(parseInt(limit));
+
+    // Extract suggestions from titles, subjects, and tags
+    const suggestions = [];
+    const seen = new Set();
+
+    courses.forEach(course => {
+      // Add title suggestions
+      if (course.title.toLowerCase().includes(searchQuery.toLowerCase()) && !seen.has(course.title)) {
+        suggestions.push({ type: 'title', text: course.title });
+        seen.add(course.title);
+      }
+
+      // Add subject suggestions
+      if (course.subject.toLowerCase().includes(searchQuery.toLowerCase()) && !seen.has(course.subject)) {
+        suggestions.push({ type: 'subject', text: course.subject });
+        seen.add(course.subject);
+      }
+
+      // Add tag suggestions
+      if (course.tags && course.tags.length > 0) {
+        course.tags.forEach(tag => {
+          if (tag.toLowerCase().includes(searchQuery.toLowerCase()) && !seen.has(tag)) {
+            suggestions.push({ type: 'tag', text: tag });
+            seen.add(tag);
+          }
+        });
+      }
+    });
+
+    res.json({
+      suggestions: suggestions.slice(0, parseInt(limit))
+    });
+  } catch (error) {
+    console.error('Search suggestions error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 module.exports = router;
