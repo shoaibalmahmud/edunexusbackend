@@ -58,6 +58,45 @@ const userSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  teacherRating: {
+    average: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 5
+    },
+    count: {
+      type: Number,
+      default: 0
+    }
+  },
+  teacherReviews: {
+    type: [{
+      student: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User'
+      },
+      course: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Course'
+      },
+      rating: {
+        type: Number,
+        min: 1,
+        max: 5,
+        required: true
+      },
+      comment: {
+        type: String,
+        default: ''
+      },
+      createdAt: {
+        type: Date,
+        default: Date.now
+      }
+    }],
+    default: []
+  },
   // Student specific fields
   grade: {
     type: String,
@@ -105,6 +144,32 @@ userSchema.methods.getPublicProfile = function() {
   const userObject = this.toObject();
   delete userObject.password;
   return userObject;
+};
+
+// Method to add or update teacher review
+userSchema.methods.addTeacherReview = function(studentId, courseId, rating, comment) {
+  if (!this.teacherReviews) {
+    this.teacherReviews = [];
+  }
+
+  this.teacherReviews = this.teacherReviews.filter(
+    review => review.student.toString() !== studentId.toString()
+  );
+
+  this.teacherReviews.push({
+    student: studentId,
+    course: courseId,
+    rating,
+    comment
+  });
+
+  const totalRating = this.teacherReviews.reduce((sum, review) => sum + review.rating, 0);
+  this.teacherRating.average = this.teacherReviews.length > 0
+    ? totalRating / this.teacherReviews.length
+    : 0;
+  this.teacherRating.count = this.teacherReviews.length;
+
+  return this.save();
 };
 
 module.exports = mongoose.model('User', userSchema);

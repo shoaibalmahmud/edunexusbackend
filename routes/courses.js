@@ -201,17 +201,15 @@ router.delete('/:id', async (req, res) => {
     
     const course = await Course.findById(req.params.id);
     if (!course) {
+      console.log('Course not found');
       return res.status(404).json({ message: 'Course not found' });
-    }
-
-    if (course.teacher.toString() !== teacherId) {
-      return res.status(403).json({ message: 'Not authorized to delete this course' });
     }
 
     // Check if any students are enrolled
     if (course.enrolledStudents.length > 0) {
-      return res.status(400).json({ 
-        message: 'Cannot delete course with enrolled students. Please contact support.' 
+      console.log('Cannot delete course with enrolled students');
+      return res.status(400).json({ // Change to 400 Bad Request
+        message: 'Cannot delete course with enrolled students. Please contact support.'
       });
     }
 
