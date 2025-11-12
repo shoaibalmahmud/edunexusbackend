@@ -315,4 +315,70 @@ router.get('/analytics/popular-courses', async (req, res) => {
   }
 });
 
+
+
+// Delete user (Admin only)
+router.delete('/users/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    
+    // Find the user
+    const user = await User.findById(id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Prevent admin from deleting themselves
+    if (req.user && req.user.id === id) {
+      return res.status(400).json({ message: 'Cannot delete your own account' });
+    }
+
+    // Check if user is a teacher with published courses
+    if (user.role === 'teacher') {
+      const teacherCourses = await Course.find({ teacher: id, isPublished: true });
+      if (teacherCourses.length > 0) {
+        return res.status(400).json({ 
+          message: 'Cannot delete teacher with published courses. Please unpublish or transfer courses first.' 
+        });
+      }
+    }
+
+    // Check if user has active orders
+    const userOrders = await Order.find({ 
+      $or: [
+        { student: id },
+        { teacher: id }
+      ],
+      status: { $in: ['pending', 'completed'] }
+    });
+
+    if (userOrders.length > 0) {
+      return res.status(400).json({ 
+        message: 'Cannot delete user with active orders. Please contact support.' 
+      });
+    }
+
+    // Delete user's unpublished courses if they're a teacher
+    if (user.role === 'teacher') {
+      await Course.deleteMany({ teacher: id, isPublished: false });
+    }
+
+    // Delete the user
+    await User.findByIdAndDelete(id);
+
+    res.json({ 
+      message: 'User deleted successfully',
+      deletedUser: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role
+      }
+    });
+  } catch (error) {
+    console.error('Delete user error:', error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+});
+
 module.exports = router;
